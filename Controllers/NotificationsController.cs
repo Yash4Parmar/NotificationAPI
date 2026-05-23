@@ -11,13 +11,16 @@ namespace NotificationAPI.Controllers;
 public class NotificationsController : ControllerBase
 {
     private readonly ILlmMessageGenerator _llmMessageGenerator;
+    private readonly DiscordWebhookSender _discordWebhookSender;
     private readonly ILogger<NotificationsController> _logger;
 
     public NotificationsController(
         ILlmMessageGenerator llmMessageGenerator,
+        DiscordWebhookSender discordWebhookSender,
         ILogger<NotificationsController> logger)
     {
         _llmMessageGenerator = llmMessageGenerator;
+        _discordWebhookSender = discordWebhookSender;
         _logger = logger;
     }
 
@@ -40,6 +43,19 @@ public class NotificationsController : ControllerBase
                 var alertMessage = await _llmMessageGenerator.GenerateMessageAsync(request, cancellationToken);
                 response.GeneratedMessage = alertMessage;
                 _logger.LogInformation("Generated Discord alert for {Id}: {AlertMessage}", response.Id, alertMessage);
+
+                try
+                {
+                    await _discordWebhookSender.SendMessageAsync(alertMessage, cancellationToken);
+                    _logger.LogInformation("Discord webhook sent for {Id}", response.Id);
+                }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Notification {Id} accepted but Discord webhook failed.",
+                        response.Id);
+                }
             }
             catch (GeminiApiException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
             {

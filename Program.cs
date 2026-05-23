@@ -19,7 +19,9 @@ namespace NotificationAPI
                 });
 
             builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
+            builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection(DiscordOptions.SectionName));
             builder.Services.AddSingleton<ILlmMessageGenerator, GeminiMessageGenerator>();
+            builder.Services.AddHttpClient<DiscordWebhookSender>();
 
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
