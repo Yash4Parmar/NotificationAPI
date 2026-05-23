@@ -1,0 +1,33 @@
+@NotificationAPI_HostAddress = http://localhost:5275
+
+GET {{NotificationAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+POST {{NotificationAPI_HostAddress}}/api/notifications
+Content-Type: application/json
+
+{
+  "level": "Warning",
+  "message": "Disk usage on srv-01 exceeded 90%",
+  "title": "Storage alert",
+  "source": "monitoring-agent",
+  "timestamp": "2026-05-22T14:30:00Z",
+  "metadata": {
+    "host": "srv-01",
+    "diskPercent": 92
+  }
+}
+
+###
+
+POST {{NotificationAPI_HostAddress}}/api/notifications
+Content-Type: application/json
+
+{
+  "level": "Info",
+  "message": "Scheduled backup completed successfully"
+}
+
+###
