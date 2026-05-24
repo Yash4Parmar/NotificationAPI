@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using NotificationAPI.Configuration;
 using NotificationAPI.Interfaces;
+using NotificationAPI.Middleware;
 using NotificationAPI.Services;
 
 namespace NotificationAPI
@@ -70,6 +71,8 @@ namespace NotificationAPI
             builder.Services.AddSwaggerGen();
 
             var app = builder.Build();
+
+            app.UseExceptionHandling();
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
