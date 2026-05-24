@@ -19,29 +19,50 @@ public class GeminiMessageGenerator : ILlmMessageGenerator, IDisposable
     ];
 
     private const string SystemPrompt = """
-                                        You analyze incoming system notifications and write a single Discord message ready to post.
+        You format system notifications into a single Discord channel message for an on-call engineering team.
 
-                                        From the notification payload:
-                                        1) Determine the alert type (e.g. storage, network, security, database, application, performance).
-                                        2) Use the provided severity level.
-                                        3) Write a concise, actionable alert (2-4 sentences) for an on-call team.
+        Severity emoji (exactly one at the start):
+        - Warning → ⚠️
+        - Error → ❌
+        - Critical → 🚨
 
-                                        Output rules:
-                                        - Return ONLY the Discord message text. No preamble, no explanation, no JSON.
-                                        - Use Discord markdown: **bold**, `inline code`, and line breaks.
-                                        - Start with one severity emoji: ⚠️ Warning, ❌ Error, 🚨 Critical.
-                                        - Keep the message under 1800 characters.
-                                        - Use this structure:
+        Use this layout (fill in real values — never output curly braces or placeholder text):
 
-                                        {emoji} **{Severity} — {Type}**
+        EMOJI **LEVEL — Category**
 
-                                        **Type:** {category}
-                                        **Severity:** {level}
-                                        **Source:** {source or Unknown}
-                                        **Time:** {timestamp}
+        **What happened:** one or two plain-language sentences from the notification message
+        **Source:** source value, or Unknown if missing
+        **Time (UTC):** timestamp from the payload
+        **Action:** one concrete next step for on-call (based only on the message; do not invent details)
 
-                                        {clear summary and recommended action}
-                                        """;
+        Category: infer from the message (Storage, Network, Security, Database, Application, Performance, or Other).
+        Use the Title for the header when it is useful; otherwise use the category.
+
+        Discord formatting:
+        - **bold** for field labels
+        - `inline code` only for hostnames, paths, IDs, or metric values
+        - blank line after the header line only
+
+        Output rules:
+        - Return ONLY the message body. No preamble, no explanation, no JSON, no code fences.
+        - Keep under 1500 characters.
+        - Do not repeat raw field names like "Level:" or "Message:" from the input.
+
+        Example input:
+        Level: Error
+        Message: Disk usage on prod-db-01 reached 94%. Threshold is 90%.
+        Title: High disk usage
+        Source: monitoring/prometheus
+        Timestamp: 2026-05-24 14:30:00 UTC
+
+        Example output:
+        ❌ **Error — Database**
+
+        **What happened:** Disk usage on `prod-db-01` reached **94%**, above the **90%** threshold.
+        **Source:** monitoring/prometheus
+        **Time (UTC):** 2026-05-24 14:30:00 UTC
+        **Action:** Check disk growth on `prod-db-01` and clear or expand storage before the volume fills.
+        """;
 
     private readonly Client _client;
     private readonly GeminiOptions _options;
@@ -56,7 +77,7 @@ public class GeminiMessageGenerator : ILlmMessageGenerator, IDisposable
 
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
             throw new InvalidOperationException(
-                "Gemini API key is not configured. Set Gemini:ApiKey in appsettings or user secrets.");
+                "Gemini API key is not configured. Set Gemini:ApiKey in appsettings.json.");
 
         _client = new Client(apiKey: _options.ApiKey);
     }
@@ -72,7 +93,8 @@ public class GeminiMessageGenerator : ILlmMessageGenerator, IDisposable
                 Parts = [new Part { Text = SystemPrompt }]
             },
             MaxOutputTokens = _options.MaxTokens,
-            Temperature = _options.Temperature
+            Temperature = _options.Temperature,
+            ThinkingConfig = new ThinkingConfig { ThinkingBudget = 0 }
         };
 
         var maxAttempts = Math.Max(1, _options.MaxRetryAttempts);
@@ -91,7 +113,7 @@ public class GeminiMessageGenerator : ILlmMessageGenerator, IDisposable
                 if (string.IsNullOrWhiteSpace(text))
                     throw new InvalidOperationException("Gemini returned an empty response.");
 
-                return text;
+                return SanitizeResponse(text);
             }
             catch (ClientError ex) when (RetryableStatusCodes.Contains(ex.StatusCode) && attempt < maxAttempts)
             {
@@ -145,11 +167,57 @@ public class GeminiMessageGenerator : ILlmMessageGenerator, IDisposable
     {
         var timestamp = request.Timestamp ?? DateTime.UtcNow;
         var sb = new StringBuilder();
+        sb.AppendLine("Write a Discord-ready alert from this notification:");
+        sb.AppendLine();
         sb.AppendLine($"Level: {request.Level}");
         sb.AppendLine($"Message: {request.Message}");
         sb.AppendLine($"Title: {request.Title ?? "N/A"}");
         sb.AppendLine($"Source: {request.Source ?? "N/A"}");
-        sb.AppendLine($"Timestamp: {timestamp:O}");
+        sb.AppendLine($"Timestamp: {timestamp:yyyy-MM-dd HH:mm:ss} UTC");
         return sb.ToString();
+    }
+
+    private static string ExtractResponseText(Candidate? candidate)
+    {
+        if (candidate?.Content?.Parts is not { Count: > 0 } parts)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+        foreach (var part in parts)
+        {
+            if (part.Thought == true || string.IsNullOrEmpty(part.Text))
+                continue;
+
+            sb.Append(part.Text);
+        }
+
+        return sb.ToString();
+    }
+
+    private static string SanitizeResponse(string text)
+    {
+        text = text.Trim();
+
+        if (text.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstNewline = text.IndexOf('\n');
+            if (firstNewline >= 0)
+                text = text[(firstNewline + 1)..];
+
+            if (text.EndsWith("```", StringComparison.Ordinal))
+                text = text[..^3];
+
+            text = text.Trim();
+        }
+
+        const string prefix = "Here";
+        if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            && text.Contains(':')
+            && text.IndexOf('\n') is var lineBreak and > 0 and < 120)
+        {
+            text = text[(lineBreak + 1)..].Trim();
+        }
+
+        return text;
     }
 }

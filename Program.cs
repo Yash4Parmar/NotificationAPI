@@ -10,6 +10,9 @@ namespace NotificationAPI
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            builder.Configuration.Sources.Clear();
+            builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+
             // Add services to the container.
 
             builder.Services.AddControllers()
