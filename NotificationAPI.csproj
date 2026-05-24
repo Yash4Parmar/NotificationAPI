@@ -11,4 +11,11 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="NotificationAPI.Tests/**" />
+    <Content Remove="NotificationAPI.Tests/**" />
+    <EmbeddedResource Remove="NotificationAPI.Tests/**" />
+    <None Remove="NotificationAPI.Tests/**" />
+  </ItemGroup>
+
 </Project>

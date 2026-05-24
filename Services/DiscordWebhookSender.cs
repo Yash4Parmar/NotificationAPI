@@ -1,10 +1,11 @@
 using System.Net.Http.Json;
 using Microsoft.Extensions.Options;
 using NotificationAPI.Configuration;
+using NotificationAPI.Interfaces;
 
 namespace NotificationAPI.Services;
 
-public class DiscordWebhookSender
+public class DiscordWebhookSender : IDiscordWebhookSender
 {
     private readonly HttpClient _httpClient;
     private readonly DiscordOptions _options;

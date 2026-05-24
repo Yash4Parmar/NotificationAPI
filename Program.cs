@@ -6,14 +6,17 @@ using NotificationAPI.Services;
 
 namespace NotificationAPI
 {
-    public class Program
+    public partial class Program
     {
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            builder.Configuration.Sources.Clear();
-            builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+            if (!builder.Environment.IsEnvironment("Testing"))
+            {
+                builder.Configuration.Sources.Clear();
+                builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+            }
 
             // Add services to the container.
 
@@ -61,7 +64,7 @@ namespace NotificationAPI
             });
 
             builder.Services.AddSingleton<ILlmMessageGenerator, GeminiMessageGenerator>();
-            builder.Services.AddHttpClient<DiscordWebhookSender>();
+            builder.Services.AddHttpClient<IDiscordWebhookSender, DiscordWebhookSender>();
 
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();

@@ -12,12 +12,12 @@ namespace NotificationAPI.Controllers;
 public class NotificationsController : ControllerBase
 {
     private readonly ILlmMessageGenerator _llmMessageGenerator;
-    private readonly DiscordWebhookSender _discordWebhookSender;
+    private readonly IDiscordWebhookSender _discordWebhookSender;
     private readonly ILogger<NotificationsController> _logger;
 
     public NotificationsController(
         ILlmMessageGenerator llmMessageGenerator,
-        DiscordWebhookSender discordWebhookSender,
+        IDiscordWebhookSender discordWebhookSender,
         ILogger<NotificationsController> logger)
     {
         _llmMessageGenerator = llmMessageGenerator;
