@@ -1,3 +1,5 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using NotificationAPI.Configuration;
 using NotificationAPI.Interfaces;
 using NotificationAPI.Services;
@@ -23,6 +25,41 @@ namespace NotificationAPI
 
             builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(GeminiOptions.SectionName));
             builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection(DiscordOptions.SectionName));
+            builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
+
+            var rateLimitOptions = builder.Configuration
+                .GetSection(RateLimitOptions.SectionName)
+                .Get<RateLimitOptions>() ?? new RateLimitOptions();
+
+            builder.Services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+                options.AddPolicy("notifications", _ =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: "notifications",
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = rateLimitOptions.PermitLimit,
+                            Window = TimeSpan.FromMinutes(rateLimitOptions.WindowMinutes),
+                            QueueLimit = 0
+                        }));
+
+                options.OnRejected = async (context, token) =>
+                {
+                    if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                    {
+                        context.HttpContext.Response.Headers.RetryAfter =
+                            ((int)retryAfter.TotalSeconds).ToString();
+                    }
+
+                    context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                    await context.HttpContext.Response.WriteAsync(
+                        "Rate limit exceeded. Maximum 10 requests per minute.",
+                        token);
+                };
+            });
+
             builder.Services.AddSingleton<ILlmMessageGenerator, GeminiMessageGenerator>();
             builder.Services.AddHttpClient<DiscordWebhookSender>();
 
@@ -40,8 +77,9 @@ namespace NotificationAPI
 
             app.UseHttpsRedirection();
 
-            app.UseAuthorization();
+            app.UseRateLimiter();
 
+            app.UseAuthorization();
 
             app.MapControllers();
 
