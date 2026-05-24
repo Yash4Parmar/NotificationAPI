@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NotificationAPI.Interfaces;
 using NotificationAPI.Models;
 using NotificationAPI.Services;
@@ -25,6 +26,7 @@ public class NotificationsController : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting("notifications")]
     public async Task<ActionResult<NotificationAcceptedResponse>> Post(
         [FromBody] NotificationRequest request,
         CancellationToken cancellationToken)
